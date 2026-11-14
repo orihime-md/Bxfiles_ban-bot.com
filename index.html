@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Antilink Bot</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #6b7785;
+      --ok: #1f9d55;
+      --warn: #d97706;
+      --bad: #dc2626;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1419;
+        --card: #1a2129;
+        --text: #e6edf3;
+        --muted: #8b98a5;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: var(--muted);
+      color: #fff;
+      margin-bottom: 16px;
+    }
+    .badge.ok { background: var(--ok); }
+    .badge.warn { background: var(--warn); }
+    .badge.bad { background: var(--bad); }
+    #qr-box {
+      min-height: 280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 8px 0 16px;
+    }
+    #qr-box img {
+      width: 260px;
+      height: 260px;
+      border-radius: 12px;
+      background: #fff;
+      padding: 10px;
+    }
+    .hint { color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+    .stat {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(127,127,127,0.2);
+      font-size: 0.95rem;
+    }
+    .cmd {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      background: rgba(127,127,127,0.15);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>🛡️ Antilink Bot</h1>
+    <div class="sub">WhatsApp link protection powered by wppconnect</div>
+
+    <div id="status" class="badge">Checking…</div>
+
+    <div id="qr-box">
+      <span class="hint">Waiting for status…</span>
+    </div>
+
+    <p class="hint">
+      Scan this QR code with WhatsApp:<br />
+      <strong>Settings → Linked devices → Link a device</strong>
+    </p>
+
+    <div class="stat">
+      Groups with antilink on: <strong id="groups">0</strong><br />
+      Command: <span class="cmd">.antilink on</span> / <span class="cmd">.antilink off</span>
+    </div>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const qrBox = document.getElementById('qr-box');
+    const groupsEl = document.getElementById('groups');
+
+    const labels = {
+      starting: ['Starting…', ''],
+      waiting_for_scan: ['Waiting for scan', 'warn'],
+      isLogged: ['Connected', 'ok'],
+      inChat: ['Connected', 'ok'],
+      connected: ['Connected', 'ok'],
+      qrReadSuccess: ['Linking…', 'warn'],
+      error: ['Error, retrying', 'bad'],
+      notLogged: ['Not logged in', 'warn']
+    };
+
+    let lastQr = null;
+
+    async function refresh() {
+      try {
+        const s = await (await fetch('/api/status')).json();
+        const [label, cls] = labels[s.status] || [s.status, ''];
+        statusEl.textContent = label;
+        statusEl.className = 'badge ' + cls;
+        groupsEl.textContent = s.antilinkGroups;
+
+        if (s.needsScan) {
+          const q = await fetch('/api/qr');
+          if (q.ok) {
+            const { qr } = await q.json();
+            if (qr !== lastQr) {
+              lastQr = qr;
+              qrBox.innerHTML = '<img alt="WhatsApp QR code" src="' + qr + '" />';
+            }
+          }
+        } else {
+          lastQr = null;
+          qrBox.innerHTML = s.status === 'connected' || s.status === 'isLogged' || s.status === 'inChat'
+            ? '<span style="font-size:4rem">✅</span>'
+            : '<span class="hint">No QR right now.</span>';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Server unreachable';
+        statusEl.className = 'badge bad';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 4000);
+  </script>
+</body>
+</html>
